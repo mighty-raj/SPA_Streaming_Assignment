@@ -93,5 +93,4 @@ object SparkMLLogisticReg extends App{
   val accuracy = evaluator.evaluate(predictionDf)
   println(accuracy)
 
-
 }

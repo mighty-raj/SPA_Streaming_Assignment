@@ -37,19 +37,22 @@ object PublishToKafkaTopic extends App {
   import spark.implicits._
 
   val streamingDataFrame = spark.readStream.option("header", "true").schema(mySchema).csv(inputCSVPath)
-  val resDf = streamingDataFrame.select(
+
+  /*val resDf = streamingDataFrame.select(
     'step.cast("String").as("key"),
     concat_ws(",",streamingDataFrame.columns.map(c => col(c)): _*).as("value")
-  )
+  )*/
 
-  val query = resDf.
+  val keyValueDF = streamingDataFrame.
+    selectExpr("CAST(step AS STRING) AS key", "to_json(struct(*)) AS value")
+
+  val query = keyValueDF.
     writeStream
     .format("kafka")
     .option("topic", kafkaTopic)
     .option("kafka.bootstrap.servers", "localhost:9092")
     .option("checkpointLocation", checkPointDir)
     .start()
-
 
   /*val query = streamingDataFrame.
     //    selectExpr("CAST(step AS STRING) AS key", "to_json(struct(*)) AS value").

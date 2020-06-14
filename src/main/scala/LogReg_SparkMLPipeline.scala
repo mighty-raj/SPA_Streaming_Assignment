@@ -1,4 +1,3 @@
-import SparkMLLogisticReg.args
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -8,6 +7,7 @@ import org.apache.spark.sql.types._
 
 object LogReg_SparkMLPipeline extends App {
   val inpCsv = args(0)
+  val modelSavePath = args(1)
 
   // context for spark
   val spark = SparkSession.builder
@@ -82,9 +82,12 @@ object LogReg_SparkMLPipeline extends App {
   val pipeline = new Pipeline().setStages(stages)
   val pipelineModel = pipeline.fit(pipelineTrainingData)
 
+  println("pipelineTestingData SCHEMA Below ===>>> ")
+  pipelineTestingData.printSchema()
+
   // test model with test data
   val pipelinePredictionDf = pipelineModel.transform(pipelineTestingData)
-  pipelinePredictionDf.show(10)
+  pipelinePredictionDf.show(10, false)
 
   // evaluate model with area under ROC
   val evaluator = new BinaryClassificationEvaluator()
@@ -95,5 +98,9 @@ object LogReg_SparkMLPipeline extends App {
   // measure the accuracy of pipeline model
   val pipelineAccuracy = evaluator.evaluate(pipelinePredictionDf)
   println(pipelineAccuracy)
+
+  // save model
+  pipelineModel.write.overwrite()
+    .save(modelSavePath)
 
 }
