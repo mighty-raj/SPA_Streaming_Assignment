@@ -5,7 +5,7 @@ import org.apache.spark.ml.feature.{StringIndexer, VectorAssembler}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
 
-object LogReg_SparkMLPipeline extends App {
+object LogRegSparkMLPipeline extends App {
   val inpCsv = args(0)
   val modelSavePath = args(1)
 
