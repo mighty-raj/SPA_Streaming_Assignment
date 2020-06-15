@@ -65,7 +65,7 @@ object LogRegSparkMLPipeline extends App {
   // test data set - 30%
   val seed = 5043
 
-  // we run marksDf on the pipeline, so split marksDf
+  // we run paysimDF on the pipeline, so split paysimDF
   val Array(pipelineTrainingData, pipelineTestingData) = paysimDF.randomSplit(Array(0.7, 0.3), seed)
 
   // train logistic regression model with training data set
