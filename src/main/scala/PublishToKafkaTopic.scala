@@ -24,7 +24,7 @@ object PublishToKafkaTopic extends App {
     StructField("step", IntegerType),
     StructField("type", StringType),
     StructField("amount", DoubleType),
-    StructField("nameOrig", StringType),S
+    StructField("nameOrig", StringType),
     StructField("oldbalanceOrg", DoubleType),
     StructField("newbalanceOrig", DoubleType),
     StructField("nameDest", StringType),
