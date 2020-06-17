@@ -1,6 +1,6 @@
 <h1> Stream Processing And Analytics </h1>
 
-<h2> Assignment-2 || Fraud Transacation Prediction </h2>
+<h2> Assignment || Fraud Transacation Prediction </h2>
 
 <h3>Apache Kafka - Spark Streaming - Spark MLLib Integration</h3>
 
