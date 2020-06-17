@@ -1,8 +1,8 @@
+import LogRegSparkMLPipeline.paysimDF
 import org.apache.spark.ml.PipelineModel
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.functions._
-import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.log4j.{Level, Logger}
 
 object PredictRealTime extends App {
@@ -49,7 +49,7 @@ object PredictRealTime extends App {
     select(from_json(col("value").cast("string"), mySchema).alias("paysim_txn")).
     select("paysim_txn.*").
     select(
-      'step,
+      'type,
       'amount,
       'oldbalanceOrg,
       'newbalanceOrig,
@@ -59,15 +59,27 @@ object PredictRealTime extends App {
   println("New PaySim Transaction Formatted and Ready to Consume ...")
   paySimDF.printSchema()
 
+  val typeIndexedDF = paySimDF.withColumn("typeIndex", when(col("type") === "TRANSFER",1.0d)
+    .otherwise(0.0d)).
+    select(
+      'typeIndex,
+      'amount,
+      'oldbalanceOrg,
+      'newbalanceOrig,
+      'oldbalanceDest,
+      'newbalanceDest
+    )
+
+
   //Load model from disk
   val logisticRegressionModelLoaded = PipelineModel.load(logRegModelPath)
   println("Loaded ML Model From Disk ... ")
 
   // prediction of pass/fail status of sample data set
   val paySimPredictedDf = logisticRegressionModelLoaded.
-    transform(paySimDF).
+    transform(typeIndexedDF).
     select(
-      'step,
+      'typeIndex,
       'amount,
       'oldbalanceOrg,
       'newbalanceOrig,
@@ -78,14 +90,6 @@ object PredictRealTime extends App {
 
   paySimPredictedDf.printSchema()
 
-  /*paySimPredictedDf.
-    filter("prediction == 1.0d").
-    writeStream.
-    format("console").
-    option("truncate","false").
-    start().
-    awaitTermination()*/
-
   //save data to different kafka topics based on the predicted value!!
   paySimPredictedDf.
     writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
@@ -94,7 +98,7 @@ object PredictRealTime extends App {
     //Predicted as FRAUD Transactions!
     batchDF.
       filter("prediction == 1.0d"). // 1.0d => FRAUD Txn
-      selectExpr("CAST(step AS STRING) AS key", "to_json(struct(*)) AS value").
+      selectExpr("CAST(typeIndex AS STRING) AS key", "to_json(struct(*)) AS value").
       write.format("kafka").
       option("kafka.bootstrap.servers", "localhost:9092").
       option("topic", "FraudTxns").
@@ -103,7 +107,7 @@ object PredictRealTime extends App {
     //Predicted as NORMAL Transactions!
     batchDF.
       filter("prediction == 0.0d"). // 0.0d => Normal Txn
-      selectExpr("CAST(step AS STRING) AS key", "to_json(struct(*)) AS value").
+      selectExpr("CAST(typeIndex AS STRING) AS key", "to_json(struct(*)) AS value").
       write.
       format("kafka").
       option("kafka.bootstrap.servers", "localhost:9092").

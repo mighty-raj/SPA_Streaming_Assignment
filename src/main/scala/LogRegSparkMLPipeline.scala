@@ -8,6 +8,7 @@ import org.apache.spark.sql.types._
 object LogRegSparkMLPipeline extends App {
   val inpCsv = args(0)
   val modelSavePath = args(1)
+  val kafkaValidationDataPath = args(2)
 
   // context for spark
   val spark = SparkSession.builder
@@ -32,26 +33,32 @@ object LogRegSparkMLPipeline extends App {
     StructField("isFlaggedFraud", IntegerType)
   ))
 
-  // read to DataFrame
+  //Read Training Data into Spark DataFrame
   val paysimDF = spark.read.format("csv")
     .option("header", value = true)
     .option("delimiter", ",")
     .option("mode", "DROPMALFORMED")
     .schema(mySchema)
-    //    .load(getClass.getResource(inpCsv).getPath)
     .load(inpCsv)
     .cache()
+    .filter($"type" === "TRANSFER" || $"type" === "CASH_OUT")
+
+  val typeIndexer = new StringIndexer()
+    .setInputCol("type")
+    .setOutputCol("typeIndex")
+
+  val typeIndexedDF = typeIndexer.fit(paysimDF).transform(paysimDF)
+
 
   // columns that need to added to feature column
-  val cols = Array("step", "amount", "oldbalanceOrg", "newbalanceOrig", "oldbalanceDest", "newbalanceDest")
+  val cols = Array("typeIndex", "amount", "oldbalanceOrg", "newbalanceOrig", "oldbalanceDest", "newbalanceDest")
 
-  // VectorAssembler to add feature column
-  // input columns - cols
-  // feature column - features
+  // VectorAssembler to add feature column || input columns - cols || feature column - features
   val assembler = new VectorAssembler()
     .setInputCols(cols)
     .setOutputCol("features")
-  val featureDf = assembler.transform(paysimDF)
+
+  val featureDf = assembler.transform(typeIndexedDF)
   featureDf.printSchema()
   featureDf.show(10)
 
@@ -60,17 +67,15 @@ object LogRegSparkMLPipeline extends App {
     .setInputCol("isFraud")
     .setOutputCol("label")
 
-  // split data set training and test
-  // training data set - 70%
-  // test data set - 30%
+  // split data set training and test || training data set - 70% || test data set - 30%
   val seed = 5043
 
   // we run paysimDF on the pipeline, so split paysimDF
-  val Array(pipelineTrainingData, pipelineTestingData) = paysimDF.randomSplit(Array(0.7, 0.3), seed)
+  val Array(pipelineTrainingData, pipelineTestingData) = typeIndexedDF.randomSplit(Array(0.7, 0.3), seed)
 
   // train logistic regression model with training data set
   val logisticRegression = new LogisticRegression()
-    .setMaxIter(100)
+    .setMaxIter(500)
     .setRegParam(0.02)
     .setElasticNetParam(0.8)
 
@@ -80,14 +85,25 @@ object LogRegSparkMLPipeline extends App {
 
   // build pipeline
   val pipeline = new Pipeline().setStages(stages)
+
   val pipelineModel = pipeline.fit(pipelineTrainingData)
 
   println("pipelineTestingData SCHEMA Below ===>>> ")
   pipelineTestingData.printSchema()
 
+  //Random Split again to just save some test data for validation thru kafka
+  val Array(pipelineValidationData, kafkaValidationData) = pipelineTestingData.randomSplit(Array(0.7,0.3), seed)
+
+  //Save Kafka Validation Data as csv
+  kafkaValidationData.coalesce(1)
+    .write
+    .option("sep",",")
+    .mode("overwrite")
+    .csv(kafkaValidationDataPath)
+
   // test model with test data
-  val pipelinePredictionDf = pipelineModel.transform(pipelineTestingData)
-  pipelinePredictionDf.show(10, false)
+  val pipelinePredictionDf = pipelineModel.transform(pipelineValidationData)
+  pipelinePredictionDf.filter("prediction == 1.0d").show(200, false)
 
   // evaluate model with area under ROC
   val evaluator = new BinaryClassificationEvaluator()
@@ -102,5 +118,4 @@ object LogRegSparkMLPipeline extends App {
   // save model
   pipelineModel.write.overwrite()
     .save(modelSavePath)
-
 }

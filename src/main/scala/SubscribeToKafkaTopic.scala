@@ -47,11 +47,4 @@ object SubscribeToKafkaTopic extends App {
     start(masterDataPath)
 
   masterDataDF.awaitTermination()
-
-/*  consoleDF.writeStream
-    .format("console")
-    .option("truncate","false")
-    .start()
-    .awaitTermination()*/
-
 }
